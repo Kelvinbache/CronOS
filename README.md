@@ -1,3 +1,14 @@
+# 🚀 Sistema de Workers Dinámicos con Sidecar (K8s)
+
+Esta documentación detalla la arquitectura de una solución basada en **Kubernetes** diseñada para la gestión eficiente de recursos, trazabilidad por usuario y escalado automático inteligente.
+
+---
+
+## 🏗️ 1. Arquitectura General del Sistema
+
+El sistema opera dentro de un clúster de Kubernetes (Minikube), centralizando la lógica en un Pod principal que utiliza el patrón **Sidecar** para interactuar con la API de Kubernetes de forma segura.
+
+```mermaid
 graph TB
     subgraph "🌐 FUERA DEL CLÚSTER"
         USER[👤 Usuario\nX-User-ID: header]
