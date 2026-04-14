@@ -79,6 +79,66 @@ graph TB
     LOGS -.->|Recolecta| APP
     LOGS -.->|Recolecta| NGINX
     METRIC -.->|Recolecta| METRICS
+
+sequenceDiagram
+    participant U as Usuario\n(X-User-ID: alice123)
+    participant N as NGINX Gateway\n(Proxy)
+    participant K as kubectl-proxy\n(Sidecar)
+    participant API as K8s API Server
+    participant A as App Python
+    participant W as Worker Pod
+    
+    Note over U,W: 1. Crear worker con ID de usuario
+    U->>N: POST /api/workers/create\nHeader: X-User-ID: alice123
+    N->>N: Validar X-User-ID\nRate limiting
+    N->>K: POST /api/v1/namespaces/proof/pods\n(forward)
+    K->>API: Proxy con token SA
+    API->>API: Validar RBAC\nCrear pod con label created-by=alice123
+    API-->>K: 201 Created
+    K-->>N: Respuesta
+    N-->>U: {"status": "created", "worker": "worker-xxx"}
+    
+    Note over U,W: 2. App registra en logs con ID
+    API->>A: Webhook/Event
+    A->>A: logger.info(f"Worker creado por {user_id}")
+    
+    Note over U,W: 3. Listar workers (filtrados por usuario)
+    U->>N: GET /api/workers/list\nHeader: X-User-ID: alice123
+    N->>K: GET /api/v1/namespaces/proof/pods
+    K->>API: Proxy
+    API-->>K: Lista de pods
+    K-->>N: Respuesta
+    N->>N: Filtrar por label created-by=alice123
+    N-->>U: {"workers": [{"name": "worker-xxx", "status": "Running"}]}
+
+stateDiagram-v2
+    [*] --> Inactivo: Estado inicial\n(replicas=0)
+    
+    state Inactivo {
+        [*] --> SinPods
+        SinPods --> EsperandoDemanda
+    }
+    
+    Inactivo --> Activo: Petición con X-User-ID
+    
+    state Activo {
+        [*] --> PodCreando
+        PodCreando --> PodRunning
+        PodRunning --> PodProcesando
+        PodProcesando --> PodRunning
+    }
+    
+    Activo --> Inactivo: Sin actividad (60s)
+
+
+flowchart LR
+    subgraph "🔐 SEGURIDAD"
+        USER_HEADER[Header: X-User-ID] --> RL[Rate Limiting NGINX]
+        RL --> SA[ServiceAccount]
+        SA --> RB[RoleBinding]
+        RB --> ROLE[Role: gestor-pods]
+        ROLE --> API[K8s API Server]
+    end
     
     DASH --> LOGS
     DASH --> METRIC
